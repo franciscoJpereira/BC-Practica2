@@ -1,4 +1,5 @@
 import { OrbitEventType, OrbitLogEntry, UserRole } from '../types/payment';
+import { createKuboOrbitAdapter } from './orbitKuboAdapter';
 
 const ORBIT_STORAGE_KEY = 'delayed_payment_orbitdb_events_v2';
 const ORBIT_CHANNEL_NAME = 'orbitdb_p2p_swarm_delayed_payment';
@@ -6,9 +7,10 @@ const ORBIT_CHANNEL_NAME = 'orbitdb_p2p_swarm_delayed_payment';
 type OrbitListener = (entries: OrbitLogEntry[]) => void;
 
 /**
- * Servicio de gestión de OrbitDB (EventLog CRDT Append-Only)
- * Sincroniza eventos P2P entre Cliente (Debtor) y Proveedor (Beneficiary)
- * incluyendo soporte de replicación en vivo entre pestañas/pares.
+ * Servicio de gestión de OrbitDB (@orbitdb/core) respaldado por el nodo local de IPFS Kubo.
+ * 
+ * Utiliza @orbitdb/core directamente sobre el adaptador de IPFS Kubo local (127.0.0.1:5001),
+ * sin requerir la librería Helia en el navegador.
  */
 class OrbitDBEventLogService {
   private dbAddress = '/orbitdb/zdpuAyB2BEscrowDelayedPaymentEventLogV2/delayed-payments-events';
@@ -31,18 +33,16 @@ class OrbitDBEventLogService {
   }
 
   /**
-   * Inicializa la instancia de OrbitDB EventLog (con fallback resiliente en navegador)
+   * Inicializa la instancia de OrbitDB EventLog usando el adaptador de Kubo local
    */
   public async init(): Promise<string> {
     if (this.isInitialized) return this.dbAddress;
 
     try {
-      // Intento de inicialización nativa si el entorno WebRTC/Helia está disponible
-      const { createHelia } = await import('helia');
       const { createOrbitDB } = await import('@orbitdb/core');
-      const helia = await createHelia();
-      const orbitdb = await createOrbitDB({ ipfs: helia });
-      const db = await orbitdb.open('delayed-payments-events', { type: 'events' });
+      const kuboIpfs = await createKuboOrbitAdapter();
+      const orbitdb = await createOrbitDB({ ipfs: kuboIpfs as any, directory: './orbitdb_kubo_data' });
+      const db = await orbitdb.open('delayed-payments-events', { type: 'events', syncAutomatically: false } as any);
       this.orbitInstance = db;
       this.dbAddress = db.address.toString();
 
@@ -51,8 +51,8 @@ class OrbitDBEventLogService {
           this.mergeRemoteEntry(record.value as OrbitLogEntry, false);
         }
       }
-    } catch {
-      // En navegadores sin WebRTC relay local activo, mantenemos el EventLog CRDT sobre almacenamiento local + BroadcastChannel P2P
+    } catch (e) {
+      console.warn('Iniciando OrbitDB con motor local y BroadcastChannel P2P:', e);
     }
 
     this.isInitialized = true;

@@ -9,11 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@helia/unixfs": "^3.0.0",
     "@orbitdb/core": "^2.1.0",
     "buffer": "^6.0.3",
     "ethers": "5.7.0",
-    "helia": "^4.2.0",
     "kubo-rpc-client": "^5.0.0",
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",
